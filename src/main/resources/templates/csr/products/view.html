@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>상품관리-CSR</title>
+  <style>
+    .fieldError {
+      color: red;
+      font-weight: bold;
+      font-size: 0.8em;
+    }
+
+    #productList .wrap .head,
+    #productList .wrap .body {
+      display: grid;
+      grid-template-columns: 50px 100px 50px 100px;
+      grid-auto-rows: 2em;
+    }
+
+    #productList .wrap .head div,
+    #productList .wrap .body div {
+      border: 1px solid gray;
+    }
+
+    #productList .wrap .head {
+      font-weight: bold;
+      font-size: 1em;
+    }
+
+    .none {
+      display: none;
+    }
+  </style>
+</head>
+
+<body>
+<h3>상품관리-CSR</h3>
+<hr>
+<div>
+  <form action="">
+    <div><span class="fieldError" id="globalErr"></span></div>
+    <div>
+      <label for="pid">상품아이디</label>
+      <input type="text" id="pid" size="10">
+      <button type="button" id="findBtn">조회</button>
+      <span id="pidErr"></span>
+    </div>
+    <div>
+      <label for="pname">상품명</label>
+      <input type="text" id="pname">
+      <span id="pnameErr"></span>
+    </div>
+    <div>
+      <label for="quantity">수량</label>
+      <input type="text" id="quantity">
+      <span id="quantityErr"></span>
+    </div>
+    <div>
+      <label for="price">가격</label>
+      <input type="text" id="price">
+      <span id="priceErr"></span>
+    </div>
+    <!--등록상태 -->
+    <div class="btngrp add">
+      <button type="button" id="addBtn">등록</button>
+    </div>
+    <!--조회상태 -->
+    <div class="btngrp read">
+      <button type="button" id="toAddBtn">신규</button>
+      <button type="button" id="modifyBtn">수정</button>
+      <button type="button" id="cancelBtn">취소</button>
+      <button type="button" id="delBtn">삭제</button>
+    </div>
+  </form>
+</div>
+
+<!--상품목록-->
+<div id="productList">
+  <h3>상품 목록</h3>
+  <div>
+    <button id="listBtn">목록</button>
+  </div>
+  <hr>
+  <div class="wrap">
+    <div class="head">
+      <div>id</div>
+      <div>상품명</div>
+      <div>수량</div>
+      <div>가격</div>
+    </div>
+    <div class="body">
+    </div>
+  </div>
+
+  <script>
+      //불변객체: 프로퍼티값 수정 불가
+      const MODE = Object.freeze({
+        ADD: Symbol('add'),             //등록
+        READ: Symbol('read'),   //조회
+      });
+
+      //전역변수
+      const form = {
+        pid: document.getElementById('pid'),
+        pname: document.getElementById('pname'),
+        quantity: document.getElementById('quantity'),
+        price: document.getElementById('price'),
+        mode: null   //등록-add, 조회-read
+      }
+
+      //등록상태
+      changeMode(MODE.ADD);
+
+      //전체 목록 가져오기
+      findAll();
+
+      //화면 Mode 변경
+      function changeMode(mode) {
+        if (form.mode == mode) return;       //현재모드와 바뀌려는 모드가 같으면 실행x
+        form.mode = mode;
+
+        switch (form.mode) {
+          case MODE.ADD:    //등록
+            //버튼
+            document.querySelector('.add').style.display = 'block';
+            document.querySelector('.read').style.display = 'none';
+            break;
+          case MODE.READ:    //조회
+            //버튼
+            document.querySelector('.add').style.display = 'none';
+            document.querySelector('.read').style.display = 'block';
+            break;
+        }
+      }
+
+      //입력데이터 가져오기
+      function getInputData() {
+        const pname = form.pname.value;
+        const quantity = form.quantity.value;
+        const price = form.price.value;
+
+        //변수이름을 property key, 변수값을 property value
+        return { pname, quantity, price };
+      };
+
+      //수량 검증
+      quantity.addEventListener('keyup', e => {
+        if (isNaN(quantity.value) || quantity.value <= 0) {        //수량, 단가는 숫자
+          quantityErr.textContent = '양수를 입력하세요';
+          if (!quantityErr.classList.contains('fieldError')) {
+            quantityErr.classList.add('fieldError');
+          }
+        } else if (quantity.value > 100) {
+          quantityErr.textContent = '수량은 100개 초과 안돼';
+          if (!quantityErr.classList.contains('fieldError')) {
+            quantityErr.classList.add('fieldError');
+          }
+        } else {
+          quantityErr.textContent = null;
+          quantityErr.classList.remove('fieldError');
+        }
+      });
+
+      //가격 검증
+      price.addEventListener('keyup', e => {
+        if (isNaN(price.value) || price.value <= 0) {        //수량, 단가는 숫자
+          priceErr.textContent = '양수를 입력하세요';
+          if (!priceErr.classList.contains('fieldError')) {
+            priceErr.classList.add('fieldError');
+          }
+        } else {
+          priceErr.textContent = null;
+          priceErr.classList.remove('fieldError');
+        }
+      });
+
+      //등록 클릭시
+      addBtn.addEventListener('click', e => {
+        //1) 데이터 검증(유효성 체크)
+        if (!validChk()) return;
+        //2) 입력데이터 가져오기
+        const product = getInputData();
+        //3) 상품등록처리
+        add(product);
+        // //4) 목록가져오기
+        // findAll();
+        //5) 양식 클리어
+        clearForm();
+      });
+
+      //삭제 클릭시
+      delBtn.addEventListener('click', e => {
+        console.log('삭제버튼 클릭');
+        const id = form.pid.value;    //상품아이디
+        deleteById(id);
+        clearForm();
+      });
+
+      //조회 클릭시
+      findBtn.addEventListener('click', e => {
+        const id = pid.value;
+        if (!id.trim().trim()) {
+          if (!pidErr.classList.contains('fieldError')) {
+            pidErr.classList.add('fieldError');
+          }
+          pidErr.textContent = '조회할 아이디를 입력해주세요.';
+          form.pid.focus();
+          return;
+        } else {
+          pidErr.textContent = ''
+          pidErr.classList.remove('fieldError');
+        }
+        findById(id);
+      });
+
+      //수정 클릭시
+      modifyBtn.addEventListener('click', e => {
+        //1) 유효성 체크
+        if (!validChk()) return;
+        //2) 수정 처리
+        update(form.pid.value, getInputData());
+      });
+
+      //취소 클릭시
+      cancelBtn.addEventListener('click', e=>{
+        const id = pid.value;
+        findById(id);
+        pnameErr.textContent = null;
+        quantityErr.textContent = null;
+        priceErr.textContent = null;
+        pnameErr.classList.remove('fieldError');
+        quantityErr.classList.remove('fieldError');
+        priceErr.classList.remove('fieldError');
+      });
+
+      //목록 클릭시
+      listBtn.addEventListener('click', e => {
+        findAll();
+      });
+
+      //신규 클릭시
+      toAddBtn.addEventListener('click', e => {
+        changeMode(MODE.ADD);
+        clearForm();
+      });
+
+      //등록
+      function add(product) {
+        const url = 'http://localhost:9080/api/products';
+
+        fetch(url, {                  //url
+          method: 'POST',             //http method
+          headers: {                  //http header
+            'Content-type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body:                   //http body
+            JSON.stringify(product)          //js 객체를 json포맷의 문자열로 변환  <==>parse 사용하면 반대 의미
+        }).then(res => res.json())
+          .then(data => {
+            console.log(data);
+            findAll();
+          })
+          .catch(err => console.log(err));
+      }
+
+      //조회
+      function findById(id) {
+        const url = `http://localhost:9080/api/products/${id}`;
+
+        fetch(url, {                  //url
+          method: 'GET',             //http method
+          headers: {                  //http header
+            'Accept': 'application/json'
+          }
+        }).then(res => res.json())
+          .then(res => {
+            console.log(res);
+            if (res.header.rtcd == '00') {
+              //조회결과 양식에 반영하기
+              fillForm(res.data);
+              // const { pid, pname, quantity, price } = res.data;
+              // form.pid.value = pid;
+              // form.pname.value = pname;
+              // form.quantity.value = quantity;
+              // form.price.value = price;
+              pidErr.textContent = '';
+              //조회 상태
+              changeMode(MODE.READ);
+            } else {
+              clearForm();
+              const errMsg = `${res.header.rtcd}-${res.header.rtmsg}`;
+              pidErr.textContent = res.header.rtmsg;
+
+              if (!globalErr.classList.contains('fieldError')) {
+                pidErr.classList.add('fieldError');
+              }
+              throw new Error(errMsg);
+            }
+          })
+          .catch(err => console.log(err));
+      }
+
+      //수정
+      function update(id, product) {
+        const url = `http://localhost:9080/api/products/${id}`;
+        fetch(url, {                  //url
+          method: 'PATCH',             //http method
+          headers: {                  //http header
+            'Content-type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify(product)
+        }).then(res => res.json())
+          .then(data => {
+            console.log(data);
+            findAll();
+          })
+          .catch(err => console.log(err));
+      }
+
+      //삭제
+      function deleteById(id) {
+        const url = `http://localhost:9080/api/products/${id}`;
+        fetch(url, {            //url
+          method: 'DELETE',        //http method
+          headers: {             //http header
+            'Accept': 'application/json'
+          },
+        }).then(res => res.json())
+          .then(data => {
+            console.log(data);
+            findAll();
+          })
+          .catch(err => console.log(err));
+      }
+
+      //목록
+      function findAll() {
+        const url = `http://localhost:9080/api/products`;
+
+        fetch(url, {                  //url
+          method: 'GET',             //http method
+          headers: {                  //http header
+            'Accept': 'application/json'
+          }
+        }).then(res => res.json())
+          .then(res => {
+            console.log(res);
+            if (res.header.rtcd == '00') {
+              const result = res.data.map(product => {
+                return `<div>${product.pid}</div>
+                                          <div><a href="#" onclick='findById(${product.pid})'>${product.pname}</a></div>
+                                          <div>${product.quantity}</div>
+                                          <div>${product.price}</div>`;
+              });
+              console.log(result.join());
+              document.querySelector('#productList .wrap .body').innerHTML = result.join('');
+            } else {
+
+            }
+          })
+          .catch(err => console.log(err));
+      }
+
+      //유효성 체크
+      function validChk() {
+        if (!pname.value.trim()) {
+          pnameErr.textContent = '필수 필드입니다.';
+          if (!pnameErr.classList.contains('fieldError')) {
+            pnameErr.classList.add('fieldError');
+          }
+        } else {
+          pnameErr.textContent = null;
+          pnameErr.classList.remove('fieldError');
+        }
+
+        //수량
+        if (!quantity.value.trim()) {
+          quantityErr.textContent = '필수 필드입니다.';
+          if (!quantityErr.classList.contains('fieldError')) {
+            quantityErr.classList.add('fieldError');
+          }
+        } else {
+          quantityErr.textContent = null;
+          quantityErr.classList.remove('fieldError');
+        }
+
+        //가격
+        if (!price.value.trim()) {
+          priceErr.textContent = '필수 필드입니다.';
+          if (!priceErr.classList.contains('fieldError')) {
+            priceErr.classList.add('fieldError');
+          }
+        } else {
+          priceErr.textContent = null;
+          priceErr.classList.remove('fieldError');
+        }
+
+        //총액 1000만원 초과 검증
+        if (quantity.value * price.value > 10000000) {
+          globalErr.textContent = '총액이 1000만원을 초과할 수 없음';
+          if (!globalErr.classList.contains('fieldError')) {
+            globalErr.classList.add('fieldError');
+          }
+        } else {
+          globalErr.textContent = null;
+          globalErr.classList.remove('fieldError');
+        }
+        return true;
+      }
+
+      //필드 clear
+      function clearForm() {
+        form.pid.value = '';
+        form.pname.value = '';
+        form.quantity.value = '';
+        form.price.value = '';
+      }
+
+      //양식 값 채우기
+      function fillForm({ pid, pname, quantity, price }) {
+        form.pid.value = pid;
+        form.pname.value = pname;
+        form.quantity.value = quantity;
+        form.price.value = price;
+      }
+    </script>
+</div>
+</body>
+
+
+</html>
